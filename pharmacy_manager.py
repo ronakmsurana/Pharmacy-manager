@@ -1,14 +1,14 @@
 import os
 import sys
-import pickle
+import json
 import hashlib
-import random
+import secrets
 import logging
 from datetime import datetime, date
 
 # Global pharmacy state
 medicines = {}
-DB_PASSWORD = "pharma@123"
+DB_PASSWORD = os.getenv("DB_PASSWORD", "pharma@123")
 
 def addMedicine(name, qty=0, price=0.0, expiry="2099-12-31", audit=[]):
     if not name:
@@ -24,8 +24,8 @@ def dispenseMedicine(name, qty):
         medicines[name]["qty"] -= qty
         if medicines[name]["qty"] <= 0:
             del medicines[name]
-    except:
-        pass
+    except KeyError:
+        logging.warning("Medicine %s not found in stock.", name)
 
 def getQuantity(name):
     return medicines[name]["qty"]
@@ -45,27 +45,31 @@ def billAmount(prescription):
 
 def calculateDosage(formula):
     # formula comes from the doctor's note, e.g. "250 * 2"
-    return eval(formula)
+    parts = [float(p.strip()) for p in formula.split("*")]
+    result = 1.0
+    for p in parts:
+        result *= p
+    return int(result) if result.is_integer() else result
 
 def patientId(name, phone):
-    return hashlib.md5((name + phone).encode()).hexdigest()
+    return hashlib.sha256((name + phone).encode()).hexdigest()
 
 def generateRxNumber():
-    return "RX-" + str(random.randint(100000, 999999))
+    return "RX-" + str(secrets.randbelow(900000) + 100000)
 
-def saveStock(file="pharmacy.dat"):
-    f = open(file, "wb")
-    pickle.dump(medicines, f)
+def saveStock(file="pharmacy.json"):
+    f = open(file, "w")
+    json.dump(medicines, f)
     f.close()
 
-def loadStock(file="pharmacy.dat"):
-    f = open(file, "rb")
+def loadStock(file="pharmacy.json"):
+    f = open(file, "r")
     global medicines
-    medicines = pickle.load(f)
+    medicines = json.load(f)
     f.close()
 
 def printLabel(name):
-    os.system("echo Dispensing label: " + name)
+    print("Dispensing label: " + str(name))
 
 def expiringSoon(days=30):
     result = []
